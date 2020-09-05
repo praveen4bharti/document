@@ -1,0 +1,143 @@
+package com.sap.bo;
+
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+
+import com.businessobjects.rebean.wi.BinaryView;
+import com.businessobjects.rebean.wi.DocumentInstance;
+import com.businessobjects.rebean.wi.OutputFormatType;
+import com.businessobjects.rebean.wi.ReportDictionary;
+import com.businessobjects.rebean.wi.ReportEngine;
+import com.businessobjects.rebean.wi.ReportEngines;
+import com.businessobjects.rebean.wi.VariableExpression;
+//import com.businessobjects.rebean.wi.BinaryView;
+//import com.businessobjects.rebean.wi.DocumentInstance;
+//import com.businessobjects.rebean.wi.OutputFormatType;
+//import com.businessobjects.rebean.wi.ReportDictionary;
+//import com.businessobjects.rebean.wi.ReportEngine;
+//import com.businessobjects.rebean.wi.ReportEngines;
+//import com.businessobjects.rebean.wi.VariableExpression;
+import com.crystaldecisions.sdk.exception.SDKException;
+import com.crystaldecisions.sdk.framework.CrystalEnterprise;
+import com.crystaldecisions.sdk.framework.IEnterpriseSession;
+import com.crystaldecisions.sdk.framework.ISessionMgr;
+import com.crystaldecisions.sdk.occa.infostore.IFiles;
+import com.crystaldecisions.sdk.occa.infostore.IInfoObject;
+import com.crystaldecisions.sdk.occa.infostore.IInfoObjects;
+import com.crystaldecisions.sdk.occa.infostore.IInfoStore;
+import com.crystaldecisions.sdk.occa.infostore.IRemoteFile;
+
+
+public class Program {
+   private static final int ReportId = 1234;
+
+public static void main(String[] args) throws IOException {
+      IEnterpriseSession enterpriseSession = null;
+      ReportEngines reportEngines = null;
+      try {
+         System.out.println("Connecting...");
+         ISessionMgr sessionMgr = CrystalEnterprise.getSessionMgr();
+         enterpriseSession = sessionMgr.logon("userID",
+               "*****", "SAPBO4", "secEnterprise");
+//         reportEngines = (ReportEngines) enterpriseSession
+//               .getService("ReportEngines");
+//         ReportEngine wiRepEngine = (ReportEngine) reportEngines
+//               .getService(ReportEngines.ReportEngineType.WI_REPORT_ENGINE);         
+
+         IInfoStore infoStore =
+               (IInfoStore) enterpriseSession.getService("InfoStore");
+     	String getInstanceId="test1";
+		String userId="userID";
+		String QUERY_FOR_BO_SERVER = "SELECT  TOP 1000000  SI_NAME,SI_EXPIRY_DATE, SI_KIND,SI_PATH,SI_SIZE,SI_OWNER, SI_FILES, SI_INSTANCE,SI_STARTTIME,SI_UPDATE_TS, SI_PROCESSINFO.SI_WEBI_PROMPTS,SI_PROCESSINFO.SI_CURRENT_VALUES,SI_SCHEDULE_STATUS from ci_infoobjects where si_instance=1 "
+				+" and si_parentid ="+ ReportId
+				+ " AND SI_OWNER="
+				+ "'"
+				+ userId.toUpperCase()
+				+ "'"
+				+ " AND SI_ID="+ getInstanceId;
+
+		System.out.println("QUERY_FOR_BO_SERVER=" + QUERY_FOR_BO_SERVER);
+         IInfoObjects infoObjects = infoStore.query(QUERY_FOR_BO_SERVER);
+         
+      // get your list of IInfoObjects
+//         IInfoObjects webiDocs = infostore.query(reportQuery.toString);
+
+         // get a report engine to open the document
+        
+       //  for (int counter = 0; counter < infoObjects.size(); counter++) {
+         //Get the actual Doc instance
+        	 ReportEngines engines = (ReportEngines)enterpriseSession.getService("ReportEngines");
+             ReportEngine reportEngine = engines.getService(ReportEngines.ReportEngineType.WI_REPORT_ENGINE);
+        // DocumentInstance docInstance = reportEngine.openDocument(counter);
+
+         // get the Raw data stream
+       
+     //    }
+         for (Object object : infoObjects) {
+            IInfoObject infoObject = (IInfoObject) object;
+            String path = getInfoObjectPath(infoObject);
+          if (path.startsWith("/")) {
+               DocumentInstance widoc = reportEngine.openDocument(infoObject.getID());
+               BinaryView bv = (BinaryView)widoc.getView(OutputFormatType.XLSX);
+              // OutputStream outputStream = null; // defined else where to meet your needs
+              // bv.getContent(outputStream);
+              
+              // BinaryView binaryView = (BinaryView) agent.getView(OutputFormatType.PDF);
+               String vFilePath="D://temp//"+ infoObject.getTitle()+ "201212" + ".xlsx";
+               File vFile = new File(vFilePath);
+               vFile.setWritable(true);
+               vFile.setReadable(true);
+               FileOutputStream fstream;
+               fstream = new FileOutputStream(vFilePath);
+               fstream.write(bv.getContent());
+               fstream.close();
+
+               //Sauvegarde local
+               IFiles myFiles= infoObject.getFiles();
+               IRemoteFile myLocalFile= (IRemoteFile) myFiles.get(0);
+
+               //Download of the .wid from the server and save it locally.
+               myLocalFile.download("C://temp//temp.wid");
+               myLocalFile.commit();
+              String doc = infoObject.getTitle();
+              System.out.println(path + "/" + doc);               
+           //  printDocumentVariables(widoc);
+               widoc.closeDocument();
+         }
+      }
+      }
+      catch (SDKException ex) {
+         ex.printStackTrace();
+      }
+      finally {
+         if (reportEngines != null)
+            reportEngines.close();
+         if (enterpriseSession != null)
+            enterpriseSession.logoff();
+      }
+      System.out.println("Finished!");
+   }
+
+   public static void printDocumentVariables(DocumentInstance widoc ) {
+      ReportDictionary dic = widoc.getDictionary();
+      VariableExpression[] variables = dic.getVariables();
+      for (VariableExpression e : variables) {
+         String name = e.getFormulaLanguageID();
+         String expression = e.getFormula().getValue();
+         System.out.println(" " + name + " " + expression);
+      }
+   }        
+
+   public static String getInfoObjectPath(IInfoObject infoObject) 
+                                        throws SDKException {
+      String path = "";
+      while (infoObject.getParentID() != 0) {
+         infoObject = infoObject.getParent();
+         path = "/" + infoObject.getTitle() + path;
+      }
+      return path;
+   }
+}
